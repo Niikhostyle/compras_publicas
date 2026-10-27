@@ -1,0 +1,5 @@
+import {NextResponse} from 'next/server';
+import {isAdmin,readSettings,saveSettings,sameOrigin} from '@/lib/security';
+export const runtime='nodejs';
+export async function GET(){if(!await isAdmin())return NextResponse.json({error:'Inicia sesión.'},{status:401});const settings=readSettings();return NextResponse.json({configured:!!settings.apiKey,model:settings.model},{headers:{'Cache-Control':'no-store'}});}
+export async function PUT(request:Request){if(!sameOrigin(request)||!await isAdmin())return NextResponse.json({error:'Acceso denegado.'},{status:403});try{const body=await request.json();if(typeof body.model!=='string'||!/^gemini-[a-zA-Z0-9.-]{1,80}$/.test(body.model)||typeof body.apiKey!=='string'||body.apiKey.length>512)return NextResponse.json({error:'Configuración inválida.'},{status:400});const settings=readSettings();saveSettings({apiKey:body.removeKey?'':body.apiKey.trim()||settings.apiKey,model:body.model});return NextResponse.json({ok:true});}catch{return NextResponse.json({error:'No se pudo guardar.'},{status:500});}}
