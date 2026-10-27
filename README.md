@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Abre http://127.0.0.1:3000/apps/compras. Para producción:
+Abre http://127.0.0.1:3000. Para producción:
 
 ```sh
 npm run build
@@ -39,7 +39,7 @@ La llave maestra y la configuración cifrada se guardan en `NORMA_DATA_DIR` si s
 - La fuente es la edición de 2024, sin verificación ni incorporación de modificaciones posteriores. La aplicación no afirma vigencia jurídica actual.
 - Para preguntas de seguimiento se incluyen los seis mensajes anteriores (hasta 6.000 caracteres por mensaje), como contexto conversacional y nunca como evidencia normativa.
 - El historial se conserva únicamente en el navegador de ese equipo y puede borrarse desde la barra lateral. La aplicación no registra preguntas en el servidor. Google recibe las consultas y el texto fuente conforme a las condiciones del proyecto configurado.
-- El PDF original se sirve en `/apps/compras/reglamento.pdf`; las referencias permiten abrir la página correspondiente.
+- El PDF original se sirve en `/reglamento.pdf`; las referencias permiten abrir la página correspondiente.
 
 ## Comprobaciones
 
@@ -51,36 +51,42 @@ npm run build
 
 Las pruebas verifican la integridad de las 50 páginas, citas literales, páginas incorrectas y rechazo de referencias inventadas. La integración real con Gemini requiere una API key con permisos y cuota; no se simulan respuestas cuando falta la clave.
 
-## Despliegue en la intranet de Chanco
+## Despliegue en compras.chanco.cl
 
-URL objetivo: `https://intranet.chanco.cl/apps/compras`.
-Carpeta del repositorio: `public_html/apps/compras` dentro del sitio de la intranet. El clon debe dejar `package.json` directamente en esa carpeta, sin un nivel adicional `compras_publicas/`.
+URL objetivo: `https://compras.chanco.cl/`.
+
+Esta instalación utiliza un subdominio dedicado y la raíz `/`, sin `/apps/compras`. La carpeta de trabajo puede ser el directorio de despliegue administrado por el panel, por ejemplo `/var/www/.../deploys/<commit>/`; su ruta física no determina la URL. El clon debe dejar `package.json` directamente en el directorio de trabajo del proceso.
 
 | Ajuste del panel | Valor |
 | --- | --- |
+| Sitio/dominio | `compras.chanco.cl` |
 | Repositorio | `Niikhostyle/compras_publicas` |
 | Rama | `main` |
-| Directorio de trabajo/despliegue | La ruta absoluta del servidor que termina en `public_html/apps/compras` |
 | Compilación | `npm ci --include=dev && npm run build` |
 | Proceso persistente | Node.js 22 o 24 LTS |
 | Inicio | `npm start` |
 | Puerto | 3000 por defecto; Next.js también acepta la variable `PORT` |
-| Directorio de publicación estática | No se utiliza una exportación estática ni se publica `.next/` como sitio |
+| HTTP Proxy | Activado para el sitio dedicado `compras.chanco.cl` |
+| Directorio de publicación estática | No se publica `.next/` como carpeta estática |
 
-El proceso debe ejecutarse desde esa carpeta y el proxy debe dirigirse al puerto del proceso Node.js. `next start` escucha en `127.0.0.1`; el proxy debe poder acceder a esa interfaz en el mismo servidor o espacio de red. Si el panel ejecuta proxy y Node.js en contenedores separados, se debe adaptar el enlace y destino de red a ese entorno.
+`NEXT_PUBLIC_BASE_PATH` debe estar vacío o no definido, tanto al compilar como al ejecutar. Si antes se configuró `/apps/compras` en el panel, quita ese valor y recompila. Las APIs, recursos, PDF y cookies utilizan la raíz por defecto.
 
-`basePath` está configurado en `lib/paths.ts` como `/apps/compras`. Las APIs, los archivos JavaScript/CSS y el PDF usan ese prefijo; las cookies de sesión también se limitan a esa ruta. Cambiarlo exige recompilar.
+### Proceso y proxy
 
-### Proxy de la subcarpeta
+El proceso debe ejecutarse desde la carpeta del repositorio ya compilado. `next start` escucha en `127.0.0.1`; el proxy debe poder acceder a esa interfaz en el mismo servidor o espacio de red. Si el panel ejecuta proxy y Node.js en contenedores separados, adapta el enlace y el destino de red a ese entorno.
 
-La intranet contiene otras aplicaciones: no redirigir todo el dominio a este proceso. Configura exclusivamente `/apps/compras` y sus rutas hijas hacia `http://127.0.0.1:3000`, conservando el prefijo completo. Por ejemplo, `/apps/compras/api/status` debe llegar a Node.js con la misma ruta, sin quitar `/apps/compras`. Conserva además la cabecera `Host` original para la protección de origen. Configura un timeout de al menos 120 segundos para las consultas a Gemini.
+El proxy de este sitio dedicado debe reenviar las rutas de `compras.chanco.cl` al puerto del proceso Node.js, conservando la ruta y la cabecera `Host` original para la protección de origen. No cambies el proxy de `intranet.chanco.cl` ni el de sus otras aplicaciones. Configura un timeout de al menos 120 segundos para Gemini.
 
-El interruptor del panel que indica que reenviará todo el dominio principal no basta para este despliegue compartido: verifica que admita un proxy por ubicación o pide esa regla al administrador del servidor. Copiar archivos en la carpeta pública por sí solo no inicia Next.js.
+La compilación por sí sola no inicia Next.js. Comprueba también el log del proceso persistente: debe mostrar `next start` y `Ready`. Después verifica `/` y `/api/status`; este último debe devolver JSON con `configured` y `pages`. Una página genérica `Forbidden` no demuestra un error de permisos de archivos: puede indicar que está atendiendo el servidor estático y no el proxy hacia Node.js. Revisa primero la asociación del proceso al sitio y el proxy, sin aplicar permisos globales ni crear un `index.html`.
 
 ### Variables y persistencia
 
-Configura `NODE_ENV=production` y `ADMIN_PASSWORD_HASH` en el entorno privado del proceso. Opcionalmente añade `GEMINI_API_KEY` y `GEMINI_MODEL`; la clave también puede guardarse posteriormente desde Administración. `NORMA_DATA_DIR` permite elegir una carpeta privada absoluta fuera de `public_html`, escribible solo por la cuenta del proceso y persistente entre despliegues. Si se omite, se usa `~/.local/share/norma-compras` en producción. Conserva conjuntamente `master.key` y `settings.enc` para recuperar la configuración existente.
+Configura `NODE_ENV=production` y `ADMIN_PASSWORD_HASH` en el entorno privado del proceso. Opcionalmente añade `GEMINI_API_KEY` y `GEMINI_MODEL`; la clave también puede guardarse posteriormente desde Administración. `NORMA_DATA_DIR` permite elegir una carpeta privada absoluta fuera del directorio público y de las carpetas de despliegues versionados, escribible solo por la cuenta del proceso y persistente entre despliegues. Si se omite, se usa `~/.local/share/norma-compras` en producción. Conserva conjuntamente `master.key` y `settings.enc` para recuperar la configuración existente.
 
 No copies `.env.local` ni claves dentro de una carpeta que el servidor web pueda descargar; usa las variables privadas del panel. Habilita HTTPS para que el navegador envíe la cookie segura. Si habilitas `TRUST_PROXY=true`, el proxy debe sobrescribir `X-Forwarded-For` con la IP real, sin aceptar una cabecera arbitraria del visitante.
 
 Esta versión requiere una instancia Node.js con disco persistente. No es una exportación estática ni está preparada para réplicas con configuraciones independientes.
+
+### Instalación opcional en una subcarpeta
+
+Para otra instalación que necesite una subcarpeta, configura `NEXT_PUBLIC_BASE_PATH=/apps/compras` antes de compilar y conserva el mismo valor al ejecutar. En ese caso el proxy debe cubrir solo ese prefijo y conservarlo al reenviar la ruta. Las cookies también se limitan automáticamente a esa ruta. Este ajuste no corresponde al despliegue dedicado de `compras.chanco.cl`.
