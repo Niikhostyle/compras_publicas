@@ -1,9 +1,14 @@
 import { randomBytes, scryptSync, timingSafeEqual, createHmac, createCipheriv, createDecipheriv } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { cookies } from 'next/headers';
 
-const directory=path.join(process.cwd(),'.runtime');
+const directory=process.env.NORMA_DATA_DIR
+  ? path.resolve(process.env.NORMA_DATA_DIR)
+  : process.env.NODE_ENV==='production'
+    ? path.join(homedir(),'.local','share','norma-compras')
+    : path.join(process.cwd(),'.runtime');
 function secret():Buffer {
   mkdirSync(directory,{recursive:true,mode:0o700});
   const file=path.join(directory,'master.key');
