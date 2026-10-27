@@ -73,7 +73,7 @@ Esta instalación utiliza un subdominio dedicado y la raíz `/`, sin `/apps/comp
 
 ### Proceso y proxy
 
-El proceso debe ejecutarse desde la carpeta del repositorio ya compilado. `next start` escucha en `127.0.0.1`; el proxy debe poder acceder a esa interfaz en el mismo servidor o espacio de red. Si el panel ejecuta proxy y Node.js en contenedores separados, adapta el enlace y el destino de red a ese entorno.
+El proceso debe ejecutarse desde la carpeta del repositorio ya compilado, por ejemplo `deploys/current` si el panel mantiene allí el enlace a la versión activa. `npm start` ejecuta `next start --hostname 0.0.0.0`, como requiere el proxy del alojamiento. El puerto predeterminado es 3000; si configuras `PORT`, el destino del proxy debe coincidir. Activa HTTP Proxy para todo el sitio dedicado; si el panel indica que el campo de camino vacío representa todo el sitio, deja ese campo vacío. El acceso externo debe pasar por el proxy HTTPS del alojamiento.
 
 El proxy de este sitio dedicado debe reenviar las rutas de `compras.chanco.cl` al puerto del proceso Node.js, conservando la ruta y la cabecera `Host` original para la protección de origen. No cambies el proxy de `intranet.chanco.cl` ni el de sus otras aplicaciones. Configura un timeout de al menos 120 segundos para Gemini.
 
