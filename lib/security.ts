@@ -3,12 +3,22 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, renameSync } from '
 import path from 'node:path';
 import { homedir } from 'node:os';
 import { cookies } from 'next/headers';
+import { isAllowedOrigin } from './origin';
 
 const directory=process.env.NORMA_DATA_DIR
   ? path.resolve(process.env.NORMA_DATA_DIR)
   : process.env.NODE_ENV==='production'
     ? path.join(homedir(),'.local','share','norma-compras')
     : path.join(process.cwd(),'.runtime');
+// Las variables del panel prevalecen. El archivo privado conserva el acceso
+// y el origen entre despliegues sin copiar secretos al repositorio.
+function privateRuntimeValue(name:'ADMIN_PASSWORD_HASH'|'APP_ORIGIN') {
+  if(process.env[name]) return process.env[name]!;
+  const file=path.join(directory,'runtime.env');
+  if(!existsSync(file)) return '';
+  const prefix=name+'=';
+  return readFileSync(file,'utf8').split(/\r?\n/).find(line=>line.startsWith(prefix))?.slice(prefix.length).trim()||'';
+}
 function secret():Buffer {
   mkdirSync(directory,{recursive:true,mode:0o700});
   const file=path.join(directory,'master.key');
@@ -16,7 +26,7 @@ function secret():Buffer {
   return readFileSync(file);
 }
 export const adminEmail='nfigueroa@chanco.cl';
-export function verifyPassword(password:string,encoded=process.env.ADMIN_PASSWORD_HASH||'') {
+export function verifyPassword(password:string,encoded=privateRuntimeValue('ADMIN_PASSWORD_HASH')) {
   const [salt,hash]=encoded.split(':'); if(!salt||!hash)return false;
   const value=scryptSync(password,salt,64); const expected=Buffer.from(hash,'hex');
   return value.length===expected.length&&timingSafeEqual(value,expected);
@@ -35,7 +45,6 @@ export function saveSettings(settings:Settings) {const iv=randomBytes(12);const 
 const rates=new Map<string,{count:number;until:number}>();
 export function rateLimit(key:string,maximum:number,window=60_000) {const now=Date.now();if(rates.size>5000)for(const [k,v]of rates)if(v.until<now)rates.delete(k);const previous=rates.get(key);if(!previous||previous.until<now){rates.set(key,{count:1,until:now+window});return true;}return ++previous.count<=maximum;}
 export function sameOrigin(request:Request) {
-  const origin=request.headers.get('origin');if(!origin)return true;
-  try {const source=new URL(origin);const target=new URL(request.url);return source.host===(request.headers.get('host')||target.host)&&['http:','https:'].includes(source.protocol);}catch{return false;}
+  return isAllowedOrigin(request, privateRuntimeValue('APP_ORIGIN'));
 }
 export function clientId(request:Request) {return process.env.TRUST_PROXY==='true'?(request.headers.get('x-forwarded-for')?.split(',')[0].trim()||'local'):'local';}
