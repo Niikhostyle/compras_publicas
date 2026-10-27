@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pages,normalize,validateCitations,buildSource,assessAnswer} from '../lib/document.ts';
+import {pages,normalize,validateCitations,buildSource,assessAnswer,sourceFragments,assessReferencedAnswer} from '../lib/document.ts';
 test('incorpora las 50 páginas y sus identificadores',()=>{assert.equal(pages.length,50);assert.deepEqual(pages.map(p=>p.page),Array.from({length:50},(_,i)=>i+1));assert.ok(pages.every(p=>p.text.length>100));assert.match(buildSource(),/<pagina numero="50">/);});
 test('acepta una cita literal de la página indicada',()=>{const citation={page:5,quote:pages[4].text.slice(200,400)};assert.deepEqual(validateCitations([citation]),[citation]);});
 test('rechaza citas inventadas, páginas falsas y citas muy cortas',()=>{assert.equal(validateCitations([{page:500,quote:'Una disposición legal que no existe en la fuente.'},{page:1,quote:'La inteligencia artificial siempre autoriza el trato directo.'},{page:1,quote:'Ley'}]).length,0);assert.deepEqual(validateCitations(null),[]);});
@@ -10,3 +10,18 @@ test('conserva una respuesta parcial si todas sus citas son verificables',()=>{c
 test('no acepta respaldo parcial con una sola cita inválida entre las válidas',()=>{const result=assessAnswer({answer:'Una respuesta',supported:false,citations:[{page:24,quote:pages[23].text.slice(700,1000)},{page:24,quote:'Debe seleccionarse siempre la segunda oferta del mismo proveedor.'}]});assert.equal(result.verified,false);assert.equal(result.reason,'invalid_citations');});
 test('normaliza guiones de corte de línea y tipografía sin borrar negaciones o montos',()=>{assert.equal(normalize('contra-\ntación “pública”'),'contratacion "publica"');assert.notEqual(normalize('no podrá superar 100 UTM'),normalize('podrá superar 1000 UTM'));});
 test('el formato debe incluir respaldo explícito y una lista de citas',()=>{assert.throws(()=>assessAnswer({answer:'Respuesta',supported:'false',citations:[]}));assert.throws(()=>assessAnswer(null));});
+test('los fragmentos reconstruyen las 50 páginas sin perder palabras',()=>{
+  assert.equal(new Set(sourceFragments.map(f=>f.id)).size,sourceFragments.length);
+  for(const page of pages)assert.equal(sourceFragments.filter(f=>f.page===page.page).map(f=>f.text).join(''),page.text);
+  assert.ok(sourceFragments.every(f=>f.text.length<=1101));
+});
+test('resuelve referencias con texto original y página asignados por el servidor',()=>{
+  const fragment=sourceFragments.find(f=>f.page===11)!;
+  const result=assessReferencedAnswer({answer:'Contenido de las bases.',supported:true,citationIds:[fragment.id]});
+  assert.equal(result.verified,true);assert.deepEqual(result.citations,[{page:fragment.page,quote:fragment.text.trim()}]);
+  assert.equal(validateCitations(result.citations).length,1);
+});
+test('rechaza identificadores inventados aunque se mezclen con referencias válidas',()=>{
+  assert.equal(assessReferencedAnswer({answer:'Contenido',supported:true,citationIds:[sourceFragments[0].id,'P99-F99']}).verified,false);
+  assert.equal(assessReferencedAnswer({answer:'Contenido',supported:true,citationIds:[]}).verified,false);
+});
